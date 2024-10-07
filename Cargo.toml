@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+    "trade_api",
+    "trade_ws",
+    "orderbook_engine",
+    "market_maker",
+    "database_processor"
+]
