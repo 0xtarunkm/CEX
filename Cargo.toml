@@ -1,9 +1,11 @@
 [workspace]
 
+resolver = "2"
+
 members = [
     "trade_api",
     "trade_ws",
     "orderbook_engine",
     "market_maker",
-    "database_processor"
+    "database_processor",
 ]
