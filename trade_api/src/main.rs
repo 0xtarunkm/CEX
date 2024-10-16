@@ -1,13 +1,14 @@
-
-
 use std::sync::Arc;
 
-use axum::{routing::{get, post}, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use tokio::sync::Mutex;
 use types::{AppState, User};
 
-mod types;
 mod routes;
+mod types;
 use routes::*;
 
 #[tokio::main]
@@ -17,16 +18,20 @@ async fn main() {
             User {
                 id: "1".to_string(),
                 balances: [("GOOGLE".to_string(), 10.0), ("USD".to_string(), 50000.0)]
-                    .iter().cloned().collect(),
+                    .iter()
+                    .cloned()
+                    .collect(),
             },
             User {
                 id: "2".to_string(),
                 balances: [("GOOGLE".to_string(), 100.0), ("USD".to_string(), 50000.0)]
-                    .iter().cloned().collect()
-            }
+                    .iter()
+                    .cloned()
+                    .collect(),
+            },
         ])),
         bids: Arc::new(Mutex::new(Vec::new())),
-        asks: Arc::new(Mutex::new(Vec::new()))
+        asks: Arc::new(Mutex::new(Vec::new())),
     };
 
     let app = Router::new()

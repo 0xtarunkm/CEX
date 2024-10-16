@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 
-use crate::types::{Order, OrderbookResult, Side, Trade};
+use crate::types::{Order, Side, Trade};
 
 pub enum OrderbookMessage {
     PlaceOrder(Order),
@@ -22,6 +22,24 @@ impl Orderbook {
             buy_orders: BTreeMap::new(),
             sell_orders: BTreeMap::new(),
             last_trade_id: 0,
+        }
+    }
+
+    pub async fn process(&mut self, message: OrderbookMessage) {
+        match message {
+            OrderbookMessage::PlaceOrder(order) => {
+                let trades = self.place_order(order);
+                println!("trades: {:?}", trades);
+            }
+            OrderbookMessage::CancelOrder(order_id) => {
+                if let Some(cancelled_order) = self.cancel_order(order_id) {
+                    println!("Cancelled order: {:?}", cancelled_order);
+                }
+            }
+            OrderbookMessage::GetDepth => {
+                let depth = self.get_depth();
+                println!("depth: {:?}", depth);
+            }
         }
     }
 
@@ -138,5 +156,38 @@ impl Orderbook {
                 .or_default()
                 .push_back(order);
         }
+    }
+
+    fn cancel_order(&mut self, order_id: u64) -> Option<Order> {
+        let mut cancelled_order = None;
+
+        for orders in self
+            .buy_orders
+            .values_mut()
+            .chain(self.sell_orders.values_mut())
+        {
+            if let Some(pos) = orders.iter().position(|order| order.id == order_id) {
+                cancelled_order = Some(orders.remove(pos).unwrap());
+                break;
+            }
+        }
+
+        cancelled_order
+    }
+
+    pub fn get_depth(&self) -> (Vec<(u64, u64)>, Vec<(u64, u64)>) {
+        let buy_depth: Vec<(u64, u64)> = self
+            .buy_orders
+            .iter()
+            .map(|(&price, orders)| (price, orders.iter().map(|o| o.quantity - o.filled).sum()))
+            .collect();
+
+        let sell_depth: Vec<(u64, u64)> = self
+            .sell_orders
+            .iter()
+            .map(|(&price, orders)| (price, orders.iter().map(|o| o.quantity - o.filled).sum()))
+            .collect();
+
+        (buy_depth, sell_depth)
     }
 }
