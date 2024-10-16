@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 
-use crate::types::{Order, OrderbookResult, Trade};
+use crate::types::{Order, OrderbookResult, Side, Trade};
 
 pub enum OrderbookMessage {
     PlaceOrder(Order),
@@ -25,21 +25,16 @@ impl Orderbook {
         }
     }
 
-    // pub fn process(&mut self, message: OrderbookMessage) -> OrderbookResult {
-    //     match message {
-    //         OrderbookMessage::PlaceOrder(order) => OrderbookResult::Trades(trades),
-    //         OrderbookMessage::CancelOrder(order_id) => {
-    //             // if let Some(cancelled_order) = self.cancel_order(order_id) {
-    //             //     OrderbookResult::CancelledOrder(cancelled_order)
-    //             // } else {
-    //             OrderbookResult::OrderNotFound
-    //             // }
-    //         }
-    //         OrderbookMessage::GetDepth => {
-    //             OrderbookResult::Depth(())
-    //         }
-    //     }
-    // }
+    pub fn place_order(&mut self, order: Order) -> Vec<Trade> {
+        let mut trades = Vec::new();
+
+        match order.side {
+            Side::Buy => self.match_buy_order(&mut trades, order),
+            Side::Sell => self.match_sell_order(&mut trades, order),
+        }
+
+        trades
+    }
 
     fn match_buy_order(&mut self, trades: &mut Vec<Trade>, mut order: Order) {
         while let Some((&price, sell_orders)) = self.sell_orders.iter_mut().next() {
@@ -87,6 +82,58 @@ impl Orderbook {
 
         if order.filled < order.quantity {
             self.buy_orders
+                .entry(order.price)
+                .or_default()
+                .push_back(order);
+        }
+    }
+
+    fn match_sell_order(&mut self, trades: &mut Vec<Trade>, mut order: Order) {
+        while let Some((&price, buy_orders)) = self.buy_orders.iter_mut().next_back() {
+            if price < order.price || order.quantity == order.filled {
+                break;
+            }
+
+            while let Some(buy_order) = buy_orders.front_mut() {
+                let match_quantity = std::cmp::min(
+                    order.quantity - order.filled,
+                    buy_order.quantity - buy_order.filled,
+                );
+
+                if match_quantity > 0 {
+                    order.filled += match_quantity;
+                    buy_order.filled += match_quantity;
+
+                    trades.push(Trade {
+                        id: self.last_trade_id,
+                        price,
+                        quantity: match_quantity,
+                        maker_order_id: buy_order.id,
+                        taker_order_id: order.id,
+                        maker_user_id: buy_order.user_id.clone(),
+                        taker_user_id: order.user_id.clone(),
+                    });
+                    self.last_trade_id += 1;
+                }
+
+                if buy_order.filled == buy_order.quantity {
+                    buy_orders.pop_front();
+                } else {
+                    break;
+                }
+
+                if order.filled == order.quantity {
+                    break;
+                }
+            }
+
+            if buy_orders.is_empty() {
+                self.buy_orders.remove(&price);
+            }
+        }
+
+        if order.filled < order.quantity {
+            self.sell_orders
                 .entry(order.price)
                 .or_default()
                 .push_back(order);
