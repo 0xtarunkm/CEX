@@ -17,8 +17,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let client = Client::open("redis://127.0.0.1/")?;
     let mut con = client.get_async_connection().await?;
 
-    println!("Connected to Redis");
-
     loop {
         let response: Option<String> = redis::cmd("RPOP")
             .arg("messages")

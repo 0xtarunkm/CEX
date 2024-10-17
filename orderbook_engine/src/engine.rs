@@ -1,10 +1,11 @@
 use serde_json::Value;
 use std::collections::HashMap;
+use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::orderbook::{Orderbook, OrderbookMessage};
-use crate::types::{Order, UserBalance};
+use crate::types::{Order, Side, UserBalance};
 
 pub struct Engine {
     orderbooks: HashMap<String, Arc<Mutex<Orderbook>>>,
@@ -28,8 +29,9 @@ impl Engine {
         match message["type"].as_str() {
             Some("PLACE_ORDER") => {
                 let market = message["market"].as_str().unwrap().to_string();
+                let base_asset = message["base_asset"].as_str().unwrap().to_string();
                 let order: Order = serde_json::from_value(message["order"].clone())?;
-                self.place_order(market, order).await?;
+                self.place_order(market, order, &base_asset).await?;
             }
             Some("CANCEL_ORDER") => {
                 let market = message["market"].as_str().unwrap().to_string();
@@ -55,14 +57,17 @@ impl Engine {
         &self,
         market: String,
         order: Order,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+        base_asset: &str
+    ) -> Result<(), Box<dyn Error>> {
         if let Some(orderbook) = self.orderbooks.get(&market) {
-            if self.lock_funds(&order).await? {
+            if self.lock_funds(&order, base_asset).await? {
                 let mut orderbook = orderbook.lock().await;
                 orderbook.process(OrderbookMessage::PlaceOrder(order)).await;
             } else {
                 println!("Insufficient funds to place order");
             }
+        } else {
+            println!("Orderbook not found for {market}");
         }
         Ok(())
     }
@@ -77,6 +82,8 @@ impl Engine {
             orderbook
                 .process(OrderbookMessage::CancelOrder(order_id))
                 .await;
+        } else {
+            println!("Orderbook not found for {market}");
         }
         Ok(())
     }
@@ -86,6 +93,8 @@ impl Engine {
             let orderbook = orderbook.lock().await;
             let depth = orderbook.get_depth();
             println!("Market depth for {}: {:?}", market, depth);
+        } else {
+            println!("Orderbook not found for {market}");
         }
         Ok(())
     }
@@ -102,18 +111,19 @@ impl Engine {
         Ok(())
     }
 
-    async fn lock_funds(&self, order: &Order) -> Result<bool, Box<dyn std::error::Error>> {
+    async fn lock_funds(&self, order: &Order, base_asset: &str) -> Result<bool, Box<dyn std::error::Error>> {
         let mut balances = self.balances.lock().await;
         let user_balance = balances
             .entry(order.user_id.clone())
             .or_insert_with(UserBalance::new);
 
-        let asset = if order.side == crate::types::Side::Buy {
+        let asset = if order.side == Side::Buy {
             "USDT"
         } else {
-            "BTC"
+            base_asset
         };
-        let required_amount = if order.side == crate::types::Side::Buy {
+
+        let required_amount = if order.side == Side::Buy {
             order.price * order.quantity
         } else {
             order.quantity
@@ -154,6 +164,7 @@ mod tests {
         let message = json!({
             "type": "PLACE_ORDER",
             "market": "BTC_USDT",
+            "base_asset": "BTC",
             "order": {
                 "id": 1,
                 "user_id": "user1",
@@ -244,6 +255,7 @@ mod tests {
         let place_order_message = json!({
             "type": "PLACE_ORDER",
             "market": "BTC_USDT",
+            "base_asset": "BTC",
             "order": {
                 "id": 1,
                 "user_id": "user1",

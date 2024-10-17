@@ -8,13 +8,6 @@ pub enum Side {
     Sell,
 }
 
-pub enum OrderbookResult {
-    Trades(Vec<Trade>),
-    CancelledOrder(Order),
-    OrderNotFound,
-    Depth((Vec<(u64, u64)>, Vec<(u64, u64)>)),
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
     pub id: u64,
